@@ -66,8 +66,8 @@ body{background:#f0f0f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
       <div class="guide-wrap" id="guideWrap"></div>
     </div>
     <div class="input-bar">
-      <input placeholder="输入药品名称或指令..." disabled>
-      <button>➤</button>
+      <input id="chatInput" placeholder="输入药品名称或指令..." onkeydown="if(event.key==='Enter')sendInput()">
+      <button onclick="sendInput()">➤</button>
     </div>
   </div>
 </div>
@@ -452,6 +452,74 @@ async function sceneCephalosporin() {
   addBot("请回复序号选择，或输入更具体的药品名称 👆");
   updateGuide();
 }
+
+// 输入框匹配逻辑
+const triggerMap = {
+  "阿莫西林": "帮我查阿莫西林",
+  "布洛芬": "查一下布洛芬的价格",
+  "芬必得": "查一下布洛芬的价格",
+  "感冒灵": "感冒灵多少钱",
+  "板蓝根": "板蓝根有货吗",
+  "头孢": "头孢 0.5g",
+  "重新授权": "__reauth__",
+  "1": "__select1__",
+  "2": "__select2__",
+  "3": "__select3__",
+  "13476350691": "__auth_input__"
+};
+
+let pendingInputHandler = null;
+
+function sendInput() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  // 如果有待处理的输入回调（如选序号、输入账号），优先走回调
+  if (pendingInputHandler) {
+    const handler = pendingInputHandler;
+    pendingInputHandler = null;
+    guideWrap.innerHTML = '';
+    handler(text);
+    return;
+  }
+
+  // 匹配场景触发词
+  for (const [keyword, scene] of Object.entries(triggerMap)) {
+    if (text.includes(keyword) && allQuickOptions.includes(scene) && !usedScenes.has(scene)) {
+      usedScenes.add(scene);
+      guideWrap.innerHTML = '';
+      sceneRouter(scene);
+      return;
+    }
+  }
+
+  // 无匹配 → 默认回复
+  addUser(text);
+  setTimeout(() => {
+    addBot("抱歉，暂时没有找到相关药品信息，请尝试输入具体药品名称，如：阿莫西林、布洛芬、感冒灵 💊");
+  }, 500);
+}
+
+// 让 showGuideButtons 同时注册 pendingInputHandler
+const _origShowGuide = showGuideButtons;
+showGuideButtons = function(options, handler) {
+  _origShowGuide(options, handler);
+  pendingInputHandler = (text) => {
+    // 找最接近的选项
+    const match = options.find(o => text.includes(o) || o.includes(text));
+    if (match) {
+      handler(match);
+    } else if (options.length === 1) {
+      handler(options[0]);
+    } else {
+      addUser(text);
+      setTimeout(() => addBot("请从以下选项中选择哦 👆"), 400);
+      _origShowGuide(options, handler);
+    }
+  };
+};
 
 // Start
 sceneIntro();
